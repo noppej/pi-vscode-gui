@@ -17,13 +17,21 @@ function fail(msg) {
 }
 
 if (!existsSync(genPath)) { fail("src/model-registry.generated.json is missing"); }
-if (!existsSync(pkgPath)) { fail("@earendil-works/pi-ai isn't installed (devDependency) — run a fresh install"); }
-
 const stamped = JSON.parse(readFileSync(genPath, "utf8")).piAiVersion;
-const installed = JSON.parse(readFileSync(pkgPath, "utf8")).version;
 
-if (stamped !== installed) {
+// Usable from a BARE CHECKOUT, with no node_modules. release.yml runs this before it tags, and
+// that job has no Node setup or install — adding one there to satisfy this check would be a lot
+// of machinery for a version string the generated file already carries. Without pi-ai installed
+// the consistency check is skipped (there is nothing to compare against) and the currency check
+// runs against the stamped version, which is exactly what a release would ship.
+const haveInstalled = existsSync(pkgPath);
+const installed = haveInstalled ? JSON.parse(readFileSync(pkgPath, "utf8")).version : stamped;
+
+if (haveInstalled && stamped !== installed) {
   fail(`generated from pi-ai ${stamped}, but ${installed} is installed (a Dependabot bump?)`);
+}
+if (!haveInstalled) {
+  console.log(`pi-ai is not installed — checking the catalog stamped at ${stamped} for currency only`);
 }
 
 // ── Second question: is what's INSTALLED actually current? ──────────────────

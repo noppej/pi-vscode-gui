@@ -49,6 +49,21 @@ jobs:
             echo "No new version to release (old=${old:-none}, new=$new) or tag already exists."
           fi
 
+      # Refuse to TAG a stale catalog, rather than discovering it at publish.
+      #
+      # v0.2.2 was tagged and released, then both publish jobs refused it because the bundled
+      # catalog was three pi-ai releases behind — the gate working, but too late: the tag was cut,
+      # so the version was stranded and could only be recovered by cutting another one. CI cannot
+      # cover this, because ci.yml and this workflow trigger on the same push and run
+      # concurrently. Checking here is the only point that precedes the tag.
+      - name: Refuse to release a stale model catalog
+        if: ${{ steps.ver.outputs.release == 'true' }}
+        env:
+          PI_REGISTRY_CURRENCY_STRICT: "1"
+        # No install needed: the generated catalog carries the pi-ai version it was built from,
+        # which is what a release would ship.
+        run: node scripts/check-model-registry.mjs
+
       - name: Create tag and GitHub Release
         if: ${{ steps.ver.outputs.release == 'true' }}
         env:
