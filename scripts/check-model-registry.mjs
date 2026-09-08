@@ -44,7 +44,25 @@ if (stamped !== installed) {
 //
 // Network-tolerant by design: a build must not fail because npm is unreachable. Unreachable is a
 // warning; a definite answer showing drift is fatal.
+// Fatal ONLY where a stale catalog actually reaches users: the publish jobs set
+// PI_REGISTRY_CURRENCY_STRICT=1. Everywhere else this warns.
+//
+// It was fatal everywhere, and that was wrong in a way worth naming. The check depends on what
+// UPSTREAM publishes, so a green pipeline turns red with no change to this repo — it took out an
+// unrelated Dependabot PR (@types/node, eslint, zod) the day pi-ai 0.85.1 shipped. Three things
+// follow from that:
+//
+//   - The blast radius was wrong. A stale catalog is a defect in the artifact we SHIP, not a
+//     reason to block a lint-config bump.
+//   - It blocks the people who would fix it, by failing every branch at once.
+//   - It would have been routed around. The first time this red-walls a release day, someone
+//     sets PI_SKIP_REGISTRY_CURRENCY=1 in CI permanently and the signal is gone for good — worse
+//     than the warning it replaced.
+//
+// The consistency check above stays fatal everywhere: it is deterministic, caused only by our
+// own commits (a pi-ai bump without regenerating), and fixable by the person who tripped it.
 const SKIP = process.env.PI_SKIP_REGISTRY_CURRENCY === "1";
+const STRICT = process.env.PI_REGISTRY_CURRENCY_STRICT === "1";
 
 function cmpSemver(a, b) {
   const pa = String(a).split(".").map(Number), pb = String(b).split(".").map(Number);
@@ -74,13 +92,16 @@ if (SKIP) {
     console.log(`model-registry.generated.json is in sync with pi-ai ${installed}`);
     console.log("  note: could not reach npm to check whether that is the current release");
   } else if (cmpSemver(installed, latest) < 0) {
-    console.error(`\n  model catalog is STALE: pi-ai ${installed} is installed, ${latest} is published.`);
+    console.error(`\n  ${STRICT ? "model catalog is STALE" : "WARNING: model catalog is behind"}: pi-ai ${installed} is installed, ${latest} is published.`);
     console.error("  The catalog carries model PRICING and availability, so a stale one quotes rates");
     console.error("  that may no longer exist and hides models you can use.\n");
     console.error("  Fix:  pnpm add -D @earendil-works/pi-ai@latest && npm run gen:model-registry");
     console.error("  Then commit package.json, the lockfile and src/model-registry.generated.json.\n");
-    console.error("  Deliberately pinning? Set PI_SKIP_REGISTRY_CURRENCY=1 for this build.\n");
-    process.exit(1);
+    if (STRICT) {
+      console.error("  Deliberately pinning? Set PI_SKIP_REGISTRY_CURRENCY=1 for this build.\n");
+      process.exit(1);
+    }
+    console.error("  Not failing this build — only a publish refuses to ship a stale catalog.\n");
   } else {
     console.log(`model-registry.generated.json is in sync with pi-ai ${installed} (current)`);
   }
