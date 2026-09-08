@@ -70,13 +70,19 @@ jobs:
       # used to exit 127 and fall through to a silent PASS, so the wall reported OK on a
       # machine that could not actually scan. The runner image does not ship ripgrep.
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      # A publish is the one place a stale catalog reaches users, so the currency check is fatal
+      # here and advisory everywhere else. See scripts/check-model-registry.mjs.
       - run: pnpm run pretest
+        env:
+          PI_REGISTRY_CURRENCY_STRICT: "1"
       - uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
       - run: pnpm exec vsce publish --no-dependencies --no-yarn --skip-duplicate --azure-credential
+        env:
+          PI_REGISTRY_CURRENCY_STRICT: "1"
 
   publish-ovsx:
     name: Publish to Open VSX
@@ -118,6 +124,8 @@ jobs:
       # job does; omitting it here is what failed the v0.1.1 Open VSX publish.
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm exec vsce package --no-dependencies -o pi-code-gui.vsix
+        env:
+          PI_REGISTRY_CURRENCY_STRICT: "1"
       # The token goes through the ENVIRONMENT, not argv: process arguments are world-readable
       # via /proc/<pid>/cmdline on the runner, and appear in error output. ovsx reads OVSX_PAT.
       # `create-namespace` legitimately fails once the namespace exists, so tolerate ONLY that —
